@@ -16,27 +16,27 @@ export default class bReader {
     }
 
     getUint8(offset) {
-        return this.dv.getUint8(offset, true);
+        return this.dv.getUint8(offset, false);
     }
 
     getUint16(offset) {
-        return this.dv.getUint16(offset, true);
+        return this.dv.getUint16(offset, false);
     }
 
     getUint32(offset) {
-        return this.dv.getUint32(offset, true);
+        return this.dv.getUint32(offset, false);
     }
 
     getInt16(offset) {
-        return this.dv.getInt16(offset, true);
+        return this.dv.getInt16(offset, false);
     }
 
     getInt32(offset) {
-        return this.dv.getInt32(offset, true);
+        return this.dv.getInt32(offset, false);
     }
 
     getFloat32(offset) {
-        return this.dv.getFloat32(offset, true);
+        return this.dv.getFloat32(offset, false);
     }
 
     getUint8Array(offset, len) {

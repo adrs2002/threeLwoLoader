@@ -6,7 +6,14 @@ export default class layerData {
         this.index = 0;
         this.parent = -1;
         this.vertexes = [];
+        this.indexes = [];
+        this.Geometry = new THREE.Geometry();
         this.pivotPos = null;
     }    
     
+    init(_data)
+    {
+
+    }
+
 }

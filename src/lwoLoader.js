@@ -22,7 +22,9 @@
  */
 
 import bReader from './parts/binaryReader'
-
+import layerData from './parts/layerData'
+import lwoFormData from './parts/lwoFormData'
+import lwoFileLoadMode from './parts/lwoFileLoadMode'
 
 class lwoLoader {
     // コンストラクタ
@@ -49,7 +51,8 @@ class lwoLoader {
         this.putMatLength = 0;
         this.nowMat = null;
         this.readingChank = "";
-        this.objects = [];
+
+        this.nowLayerData = null;
 
         //ボーン情報格納用
         // this.BoneInf = new boneInf();
@@ -182,6 +185,7 @@ class lwoLoader {
 
         //Lwofileとして分解できたものの入れ物
         this.lwoData = {};
+        this.lwoData.objects = [];
 
         // 返ってきたデータを行ごとに分解
         //初回判別。正しいデータかどうか
@@ -229,33 +233,100 @@ class lwoLoader {
     }
 
     finalproc() {
-
         setTimeout(() => { this.onLoad(this.lwoData) }, 1);
-
     }
 
-
     read() {
-        if(this.nowReadMode <= lwoFileLoadMode.seachChunk)
-        {
+        if (this.nowReadMode <= lwoFileLoadMode.seachChunk) {
             this.readingChank = this.bReader.getString(this.readOffset, 4);
             this.readOffset += 4;
 
-            this.tgtLength = this.bReader.getUint32(this.readOffset); 
+            this.tgtLength = this.bReader.getUint32(this.readOffset);
             this.readOffset += 4;
             this.nowReaded = 0;
-
-        }else{
-            switch(this.readingChank){
+            this.nowReadMode = lwoFileLoadMode.readData;
+        } else {
+            switch (this.readingChank) {
                 case 'TAGS':
-                    this.nowTagName = this.bReader.getString(this.readOffset, this.tgtLength);
-                    this.objects[this.nowTagName] = {};
-                default: 
-                    //飛ばす
-                    this.readOffset += this.tgtLength;
-                    this.nowReadMode = lwoFileLoadMode.seachChunk;
-                break;
+                    this.nowTagName = "default";//this.bReader.getString(this.readOffset, this.tgtLength);
+                    this.objects = new lwoFormData();
+                    this.skipChank();
+                    break;
+                case 'LAYR':
+                    this.nowTagName = "default"; //this.bReader.getString(this.readOffset, this.tgtLength);
+                    this.nowLayerData = new layerData();
+                    //とりあえずレイヤーも頂点以外は虫してる
+                    this.skipChank();
+                    break;
+                case 'PNTS':
+                    //頂点データの読み込み
+                    this.nowLayerData.Geometry.vertices.push(new THREE.Vector3(this.bReader.getFloat32(this.readOffset), this.bReader.getFloat32(this.readOffset + 4), this.bReader.getFloat32(this.readOffset + 8)));
+                    this.addReadOffset(12);
+                    this.nowLayerData.Geometry.skinWeights.push(new THREE.Vector4(1, 0, 0, 0));
+                    this.checkEndChank();
+                    break;
+                case 'BBOX ':
+                    //boudingBox…イラネ
+                    this.skipChank();
+                    break;
+                case 'POLS':
+                    //こいつは子階層データが許可されてるので、気を付ける
+                    this.readingChank = this.bReader.getString(this.readOffset, 4);
+                    this.addReadOffset(4);
+                    break;
+                case 'FACE':
+                    //VectexIndexデータ
+                    //この読み方だと、6万頂点までのデータしか読めない。　……まーそれ以上のデータが来たら、そんとき考えるさ・・っつかンなもんブラウザで表示すんな
+                    const vCount = this.bReader.getUint16(this.readOffset);
+                    this.addReadOffset(2);
+                    //1面＝3頂点にしか対応していないので、やや苦しいがこのような構成に
+                    for (let i = 0; i < vCount - 2; i++) {
+                        this.nowLayerData.Geometry.faces.push(new THREE.Face3(this.bReader.getUint16(this.readOffset), this.bReader.getUint16(this.readOffset + 2), this.bReader.getUint16(this.readOffset + 4), new THREE.Vector3(1, 1, 1).normalize()));
+                        this.addReadOffset(2);
+                    }
+                    this.addReadOffset(4);
+                    this.checkEndChank();
+                    //とりあえず試してみたいので、無理やり終わらせる
+                    if (this.nowReadMode == lwoFileLoadMode.seachChunk) {
+                        this.readOffset = this.lwoData.fileLength;
+                    }
+                    break;
+                default:
+                    this.skipChank();
+                    break;
             }
+        }
+    }
+
+    addReadOffset(_v) {
+        this.readOffset += _v;
+        this.nowReaded += _v;
+    }
+
+    skipChank() {
+        //飛ばす
+        this.readOffset += this.tgtLength;
+        this.nowReadMode = lwoFileLoadMode.seachChunk;
+    }
+
+    checkEndChank() {
+        if (this.nowReaded >= this.tgtLength) { this.nowReadMode = lwoFileLoadMode.seachChunk; }
+    }
+
+    readFinalize() {
+        if (this.nowLayerData.Geometry != null) {
+
+            //１つのmesh終了
+            this.nowLayerData.Geometry.computeBoundingBox();
+            this.nowLayerData.Geometry.computeBoundingSphere();
+
+            this.nowLayerData.Geometry.verticesNeedUpdate = true;
+            this.nowLayerData.Geometry.normalsNeedUpdate = true;
+            this.nowLayerData.Geometry.colorsNeedUpdate = true;
+            this.nowLayerData.Geometry.uvsNeedUpdate = true;
+            this.nowLayerData.Geometry.groupsNeedUpdate = true;
+            const bufferGeometry = new THREE.BufferGeometry();
+            this.lwoData.objects.push(new THREE.Mesh(bufferGeometry.fromGeometry(this.nowLayerData.Geometry /*, new THREE.MultiMaterial(this.loadingXdata.FrameInfo_Raw[nowFrameName].Materials*/)));
         }
     }
 };
