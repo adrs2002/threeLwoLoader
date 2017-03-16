@@ -8,6 +8,6 @@ npm run build
 npm install rollup --global
 
 やってからの、個別ビルド
-rollup src/threeXfileLoader.js
+rollup src/lwoLoader.js
 
 ってやると、エラー教えてくれる

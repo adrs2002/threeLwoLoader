@@ -4,8 +4,8 @@ import babel from 'rollup-plugin-babel'
 // import buble from 'rollup-plugin-buble'
 
 export default {
-  entry: 'src/threeXfileLoader.js',
-  dest: 'XLoader.js',
+  entry: 'src/lwoLoader.js',
+  dest: 'lwoLoader.js',
   plugins: [
         nodeResolve({ jsnext: true }), // npmモジュールを`node_modules`から読み込む
           cleanup({
