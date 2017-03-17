@@ -9,6 +9,7 @@ export default class layerData {
         this.indexes = [];
         this.Geometry = new THREE.Geometry();
         this.pivotPos = null;
+        this.TriangleFaceIndexes = [];
     }    
     
     init(_data)
