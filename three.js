@@ -21192,13 +21192,13 @@
 
 									var group = groups[ i ];
 									var groupMaterial = materials[ group.materialIndex ];
-
+									if(groupMaterial != null){
 									if ( groupMaterial.visible === true ) {
 
 										pushRenderItem( object, geometry, groupMaterial, _vector3.z, group );
 
 									}
-
+									}else{ console.log('MAT:' + group.materialIndex + ' is undefund!'); }
 								}
 
 							} else {

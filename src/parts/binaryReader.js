@@ -5,8 +5,8 @@ export default class bReader {
 
     constructor(buffer) {
         this.dv = new DataView(buffer);
-    }    
-    
+    }
+
     getString(offset, len) {
         let result = "";
         for (let i = offset; i < offset + len; i++) {
@@ -14,6 +14,20 @@ export default class bReader {
         }
         return result;
     }
+
+    getString_Next(offset, len) {
+        let result = "";
+        for (let i = offset; i < offset + len; i++) {
+            const nowKeyCode = this.getUint8(i);
+            if (nowKeyCode != 0) {
+                result += String.fromCharCode(this.getUint8(i));
+            } else {
+                return [result, i - offset];
+            }
+        }
+        return [result, len];
+    }
+
 
     getUint8(offset) {
         return this.dv.getUint8(offset, false);

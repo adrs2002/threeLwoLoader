@@ -39,6 +39,20 @@ var bReader = function () {
             return result;
         }
     }, {
+        key: "getString_Next",
+        value: function getString_Next(offset, len) {
+            var result = "";
+            for (var i = offset; i < offset + len; i++) {
+                var nowKeyCode = this.getUint8(i);
+                if (nowKeyCode != 0) {
+                    result += String.fromCharCode(this.getUint8(i));
+                } else {
+                    return [result, i - offset];
+                }
+            }
+            return [result, len];
+        }
+    }, {
         key: "getUint8",
         value: function getUint8(offset) {
             return this.dv.getUint8(offset, false);
@@ -202,6 +216,8 @@ THREE.lwoLoader = function () {
         this.face_size = 0;
         this.bReader = null;
         this.onLoad = null;
+        this.tags = [];
+        this.tbl_sufToTag = [];
     }
 
     createClass(lwoLoader, [{
@@ -356,8 +372,8 @@ THREE.lwoLoader = function () {
                 var tgtId = this.currentChank > 0 ? this.currentChank - 1 : 0;
                 switch (this.chankInfos[this.currentChank].chankName) {
                     case 'TAGS':
-                        this.nowTagName = "default";
                         this.objects = new lwoFormData();
+                        this.readTags();
                         this.skipChank();
                         break;
                     case 'LAYR':
@@ -378,11 +394,6 @@ THREE.lwoLoader = function () {
                         this.readPols();
                         this.skipChank();
                         refFlg = true;
-                        break;
-                    case 'FACE':
-                        if (this.chankInfos[tgtId].chankName == "POLS") {
-                            this.readFaces();
-                        }
                         break;
                     case 'PTAG':
                         this.readPtag();
@@ -450,6 +461,27 @@ THREE.lwoLoader = function () {
                     return -1;
                 }
             }
+            return -1;
+        }
+    }, {
+        key: 'readTags',
+        value: function readTags() {
+            var startOffset = this.readOffset;
+            var addOffset = 0;
+            while (true) {
+                var s = this.bReader.getString_Next(startOffset + addOffset, this.tgtLength - addOffset);
+                if (s != undefined) {
+                    if (s[0].length > 0) {
+                        this.tags.push(s[0]);
+                    }
+                    addOffset += s[1] + 1;
+                    if (addOffset >= this.tgtLength) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
         }
     }, {
         key: 'readPols',
@@ -502,18 +534,20 @@ THREE.lwoLoader = function () {
     }, {
         key: 'readPtag',
         value: function readPtag() {
-            var getLength = this.SeachStr('FACE', this.tgtLength);
+            var getLength = this.SeachStr('SURF', this.tgtLength);
             var nowOffset = 0;
+            var putCount = 0;
             if (getLength != -1) {
                 nowOffset = this.readOffset + getLength + 4;
                 while (true) {
                     var nextB = this.bReader.getUint16(nowOffset);
-                    if (nextB != undefined && nextB > 0) {
+                    if (nextB != undefined) {
                         nowOffset += this.readPtagSurf(nowOffset);
+                        putCount++;
                     } else {
                         break;
                     }
-                    if (nowOffset >= this.readOffset + this.tgtLength) {
+                    if (nowOffset >= this.readOffset + this.tgtLength || putCount >= this.nowLayerData.TriangleFaceIndexes.length) {
                         break;
                     }
                 }
@@ -523,21 +557,39 @@ THREE.lwoLoader = function () {
         key: 'readPtagSurf',
         value: function readPtagSurf(_Offset) {
             var tmpOffset = _Offset;
-            var tgtFace = this.bReader.getUint16(this.readOffset);tmpOffset += 2;
-            var tgtMat = this.bReader.getUint16(this.readOffset);tmpOffset += 2;
-            for (var i = 0; i < this.nowLayerData.TriangleFaceIndexes.length; i++) {
-                for (var m = 0; m < this.nowLayerData.TriangleFaceIndexes[i].length; m++) {
-                    var k = this.nowLayerData.TriangleFaceIndexes[i][m];
-                    this.nowLayerData.Geometry.faces[k].materialIndex = parseInt(tgtMat);
+            var tgtFace = this.bReader.getUint16(tmpOffset);tmpOffset += 2;
+            var tgtMat = this.bReader.getUint16(tmpOffset);tmpOffset += 2;
+            for (var m = 0; m < this.nowLayerData.TriangleFaceIndexes[tgtFace].length; m++) {
+                var k = this.nowLayerData.TriangleFaceIndexes[tgtFace][m];
+                this.nowLayerData.Geometry.faces[k].materialIndex = tgtMat;
+            }
+            return 4;
+        }
+    }, {
+        key: 'seachTagID',
+        value: function seachTagID(_s) {
+            for (var i = 0; i < this.tags.length; i++) {
+                if (this.tags[i] == _s) {
+                    return i;
                 }
             }
+            return -1;
         }
     }, {
         key: 'readSurface',
         value: function readSurface() {
             this.nowMat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
             var nowDiffuse = 1.0;
-            var getLength = this.SeachStr('CORL', this.tgtLength);
+            var s = this.bReader.getString_Next(this.readOffset, this.tgtLength);
+            if (s == null || s[0].length == 0) {
+                return;
+            }
+            var tagID = this.seachTagID(s[0]);
+            if (tagID == -1) {
+                return;
+            }
+            this.tbl_sufToTag[tagID] = this.Materials.length;
+            var getLength = this.SeachStr('COLR', this.tgtLength);
             var nowOffset = 0;
             if (getLength != -1) {
                 nowOffset = this.readOffset + getLength + 4;
@@ -554,12 +606,36 @@ THREE.lwoLoader = function () {
             }
             getLength = this.SeachStr('SPEC', this.tgtLength);
             nowOffset = 0;
+            this.nowMat.shininess = 0.4;
             if (getLength != -1) {
                 nowOffset = this.readOffset + getLength + 4;
                 nowOffset += 2;
-                this.nowMat.specular.r = this.bReader.getFloat32(nowOffset);nowOffset += 4;
-                this.nowMat.specular.g = this.bReader.getFloat32(nowOffset);nowOffset += 4;
-                this.nowMat.specular.b = this.bReader.getFloat32(nowOffset);nowOffset += 4;
+                var shininess = this.bReader.getFloat32(nowOffset);
+                this.nowMat.shininess = shininess;
+            }
+            getLength = this.SeachStr('REFL', this.tgtLength);
+            nowOffset = 0;
+            if (getLength != -1) {
+                nowOffset = this.readOffset + getLength + 4;
+                nowOffset += 2;
+                var specular = this.bReader.getFloat32(nowOffset);
+                this.nowMat.specular.r = specular;
+                this.nowMat.specular.g = specular;
+                this.nowMat.specular.b = specular;
+            } else {
+                this.nowMat.specular.r = 0.4;
+                this.nowMat.specular.g = 0.4;
+                this.nowMat.specular.b = 0.4;
+            }
+            getLength = this.SeachStr('SIDE', this.tgtLength);
+            nowOffset = 0;
+            if (getLength != -1) {
+                nowOffset = this.readOffset + getLength + 4;
+                nowOffset += 2;
+                var side = this.bReader.getUint16(nowOffset);
+                if (side == 3) {
+                    this.nowMat.side = THREE.DoubleSide;
+                }
             }
             this.nowMat.color.r *= nowDiffuse;
             this.nowMat.color.g *= nowDiffuse;
@@ -577,8 +653,11 @@ THREE.lwoLoader = function () {
                 this.nowLayerData.Geometry.colorsNeedUpdate = true;
                 this.nowLayerData.Geometry.uvsNeedUpdate = true;
                 this.nowLayerData.Geometry.groupsNeedUpdate = true;
+                for (var i = 0; i < this.nowLayerData.Geometry.faces.length; i++) {
+                    this.nowLayerData.Geometry.faces[i].materialIndex = this.tbl_sufToTag[this.nowLayerData.Geometry.faces[i].materialIndex];
+                }
                 var bufferGeometry = new THREE.BufferGeometry();
-                this.lwoData.objects.push(new THREE.Mesh(bufferGeometry.fromGeometry(this.nowLayerData.Geometry, this.Materials)));
+                this.lwoData.objects.push(new THREE.Mesh(bufferGeometry.fromGeometry(this.nowLayerData.Geometry), new THREE.MultiMaterial(this.Materials)));
             }
         }
     }]);

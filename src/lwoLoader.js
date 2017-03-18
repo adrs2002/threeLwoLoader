@@ -87,6 +87,8 @@ class lwoLoader {
         this.bReader = null;
         this.onLoad = null;
 
+        this.tags = [];
+        this.tbl_sufToTag = [];
     }
 
     //読み込み開始命令部
@@ -258,8 +260,8 @@ class lwoLoader {
             const tgtId = this.currentChank > 0 ? this.currentChank - 1 : 0;
             switch (this.chankInfos[this.currentChank].chankName) {
                 case 'TAGS':
-                    this.nowTagName = "default";//this.bReader.getString(this.readOffset, this.tgtLength);
                     this.objects = new lwoFormData();
+                    this.readTags();
                     this.skipChank();
                     break;
                 case 'LAYR':
@@ -285,11 +287,6 @@ class lwoLoader {
                     this.readPols();
                     this.skipChank();
                     refFlg = true;
-                    break;
-                case 'FACE':
-                    if (this.chankInfos[tgtId].chankName == "POLS") {
-                        this.readFaces();
-                    }
                     break;
                 case 'PTAG':
                     //こいつは子階層データが許可されてるので、気を付ける
@@ -352,6 +349,22 @@ class lwoLoader {
             }
             if (i + this.readOffset >= this.lwoData.fileLength) { return -1; }
         }
+        return -1;
+    }
+
+    readTags() {
+        const startOffset = this.readOffset;
+        let addOffset = 0;
+        while (true) {
+            const s = this.bReader.getString_Next(startOffset + addOffset, this.tgtLength - addOffset);
+            if (s != undefined) {
+                if (s[0].length > 0) {
+                    this.tags.push(s[0]);
+                }
+                addOffset += s[1] + 1;
+                if (addOffset >= this.tgtLength) { break; }
+            } else { break; }
+        }
     }
 
     readPols() {
@@ -413,18 +426,20 @@ class lwoLoader {
 
     readPtag() {
         //[FACE]を探す
-        let getLength = this.SeachStr('FACE', this.tgtLength);
+        let getLength = this.SeachStr('SURF', this.tgtLength);
         let nowOffset = 0;
+        let putCount = 0;
         if (getLength != -1) {
             nowOffset = this.readOffset + getLength + 4;
             while (true) {
                 const nextB = this.bReader.getUint16(nowOffset);
-                if (nextB != undefined && nextB > 0) {
+                if (nextB != undefined) {
                     nowOffset += this.readPtagSurf(nowOffset);
+                    putCount++;
                 } else {
                     break;
                 }
-                if (nowOffset >= this.readOffset + this.tgtLength) { break; }
+                if (nowOffset >= this.readOffset + this.tgtLength || putCount >= this.nowLayerData.TriangleFaceIndexes.length) { break; }
             }
         }
     }
@@ -432,26 +447,41 @@ class lwoLoader {
     readPtagSurf(_Offset) {
         let tmpOffset = _Offset;
         // 頭のu16の面は　u16のマテリアルに属している　という組み合わせになる
-        const tgtFace = this.bReader.getUint16(this.readOffset); tmpOffset += 2;
-        const tgtMat = this.bReader.getUint16(this.readOffset); tmpOffset += 2;
-        for (let i = 0; i < this.nowLayerData.TriangleFaceIndexes.length; i++) {
-            for (let m = 0; m < this.nowLayerData.TriangleFaceIndexes[i].length; m++) {
-                const k = this.nowLayerData.TriangleFaceIndexes[i][m];
-                this.nowLayerData.Geometry.faces[k].materialIndex = parseInt(tgtMat);
-            }
+        const tgtFace = this.bReader.getUint16(tmpOffset); tmpOffset += 2;
+        const tgtMat = this.bReader.getUint16(tmpOffset); tmpOffset += 2;
+        for (let m = 0; m < this.nowLayerData.TriangleFaceIndexes[tgtFace].length; m++) {
+            const k = this.nowLayerData.TriangleFaceIndexes[tgtFace][m];
+            this.nowLayerData.Geometry.faces[k].materialIndex = tgtMat;
         }
+        return 4;
+    }
+
+    seachTagID(_s) {
+        for (let i = 0; i < this.tags.length; i++) {
+            if (this.tags[i] == _s) { return i; }
+        }
+        return -1;
     }
 
     readSurface() {
         this.nowMat = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
         let nowDiffuse = 1.0;
+
+        //Suf名称を探す
+        const s = this.bReader.getString_Next(this.readOffset, this.tgtLength);
+        if (s == null || s[0].length == 0) { return; }
+        const tagID = this.seachTagID(s[0]);
+        if (tagID == -1) { return; }
+        this.tbl_sufToTag[tagID] = this.Materials.length;
+        //this.tbl_sufToTag.push(tagID);
+
         //[CORL]を探す
-        let getLength = this.SeachStr('CORL', this.tgtLength);
+        let getLength = this.SeachStr('COLR', this.tgtLength);
         let nowOffset = 0;
         if (getLength != -1) {
             nowOffset = this.readOffset + getLength + 4;
             //Color読み
-            nowOffset += 2; //長さ。ほぼ固定なので飛ばす
+            nowOffset += 2; //長さ。ほぼ固定14なので飛ばす
             this.nowMat.color.r = this.bReader.getFloat32(nowOffset); nowOffset += 4;
             this.nowMat.color.g = this.bReader.getFloat32(nowOffset); nowOffset += 4;
             this.nowMat.color.b = this.bReader.getFloat32(nowOffset); nowOffset += 4;
@@ -464,21 +494,52 @@ class lwoLoader {
             nowOffset += 2; //長さ。ほぼ固定なので飛ばす
             nowDiffuse = this.bReader.getFloat32(nowOffset);
         }
+
         //SPEC=スペキュラ
         getLength = this.SeachStr('SPEC', this.tgtLength);
+        nowOffset = 0;
+        this.nowMat.shininess = 0.4;    //LWはデフォルトが0.4
+        if (getLength != -1) {
+            nowOffset = this.readOffset + getLength + 4;
+            //specular
+            nowOffset += 2; //長さ。ほぼ固定なので飛ばす
+            const shininess = this.bReader.getFloat32(nowOffset);
+            this.nowMat.shininess = shininess;
+        }
+        //REFL=反射率？
+        getLength = this.SeachStr('REFL', this.tgtLength);
         nowOffset = 0;
         if (getLength != -1) {
             nowOffset = this.readOffset + getLength + 4;
             //specular
             nowOffset += 2; //長さ。ほぼ固定なので飛ばす
-            this.nowMat.specular.r = this.bReader.getFloat32(nowOffset); nowOffset += 4;
-            this.nowMat.specular.g = this.bReader.getFloat32(nowOffset); nowOffset += 4;
-            this.nowMat.specular.b = this.bReader.getFloat32(nowOffset); nowOffset += 4;
+            const specular = this.bReader.getFloat32(nowOffset);
+            this.nowMat.specular.r = specular;
+            this.nowMat.specular.g = specular;
+            this.nowMat.specular.b = specular;
+        }else{  //LWはデフォルトが0.4
+            this.nowMat.specular.r = 0.4;
+            this.nowMat.specular.g = 0.4;
+            this.nowMat.specular.b = 0.4;
+        }
+
+        //両面フラグ
+        getLength = this.SeachStr('SIDE', this.tgtLength);
+        nowOffset = 0;
+        if (getLength != -1) {
+            nowOffset = this.readOffset + getLength + 4;
+            //specular
+            nowOffset += 2; //長さ。ほぼ固定なので飛ばす
+            const side = this.bReader.getUint16(nowOffset);
+            if (side == 3) {
+                this.nowMat.side = THREE.DoubleSide;
+            }
         }
 
         this.nowMat.color.r *= nowDiffuse;
         this.nowMat.color.g *= nowDiffuse;
         this.nowMat.color.b *= nowDiffuse;
+
         this.Materials.push(this.nowMat);
     }
 
@@ -494,8 +555,14 @@ class lwoLoader {
             this.nowLayerData.Geometry.colorsNeedUpdate = true;
             this.nowLayerData.Geometry.uvsNeedUpdate = true;
             this.nowLayerData.Geometry.groupsNeedUpdate = true;
+
+            //TAGと出力したマテリアル番号を一致させる。
+            for (let i = 0; i < this.nowLayerData.Geometry.faces.length; i++) {
+                this.nowLayerData.Geometry.faces[i].materialIndex = this.tbl_sufToTag[this.nowLayerData.Geometry.faces[i].materialIndex];
+            }
+
             const bufferGeometry = new THREE.BufferGeometry();
-            this.lwoData.objects.push(new THREE.Mesh(bufferGeometry.fromGeometry(this.nowLayerData.Geometry, this.Materials)));
+            this.lwoData.objects.push(new THREE.Mesh(bufferGeometry.fromGeometry(this.nowLayerData.Geometry), new THREE.MultiMaterial(this.Materials)));
         }
     }
 };
