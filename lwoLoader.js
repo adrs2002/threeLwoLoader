@@ -1,3 +1,26 @@
+
+/**
+ * @author Jey-en  https://github.com/adrs2002
+ * 
+ * this loader repo -> https://github.com/adrs2002/threeLwoLoader
+ * 
+ * This loader is load model from .lwo file format. (for LightWave3D Model Object).
+ *  ! this version are load from [ Model ] format .Lwo only ! not a Scene(and Animation).
+ * 
+ * Support
+ *  - mesh
+ *  - material
+ *
+ *  Not Support
+ *  - Multi layers
+ *  - texture
+ *  - normal / uv
+ *  - skinning
+ *  - material(ditail)
+ *  - morph
+ *  - scene
+ */
+
 var classCallCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new TypeError("Cannot call a class as a function");
@@ -627,6 +650,14 @@ THREE.lwoLoader = function () {
                 this.nowMat.specular.g = 0.4;
                 this.nowMat.specular.b = 0.4;
             }
+            getLength = this.SeachStr('LUMI', this.tgtLength);
+            nowOffset = 0;
+            var emissive = 0;
+            if (getLength != -1) {
+                nowOffset = this.readOffset + getLength + 4;
+                nowOffset += 2;
+                emissive = this.bReader.getFloat32(nowOffset);
+            }
             getLength = this.SeachStr('SIDE', this.tgtLength);
             nowOffset = 0;
             if (getLength != -1) {
@@ -637,6 +668,9 @@ THREE.lwoLoader = function () {
                     this.nowMat.side = THREE.DoubleSide;
                 }
             }
+            this.nowMat.emissive.r = this.nowMat.color.r * emissive;
+            this.nowMat.emissive.g = this.nowMat.color.g * emissive;
+            this.nowMat.emissive.b = this.nowMat.color.b * emissive;
             this.nowMat.color.r *= nowDiffuse;
             this.nowMat.color.g *= nowDiffuse;
             this.nowMat.color.b *= nowDiffuse;
@@ -648,6 +682,8 @@ THREE.lwoLoader = function () {
             if (this.nowLayerData.Geometry != null) {
                 this.nowLayerData.Geometry.computeBoundingBox();
                 this.nowLayerData.Geometry.computeBoundingSphere();
+                this.nowLayerData.Geometry.computeVertexNormals();
+                this.nowLayerData.Geometry.computeFaceNormals();
                 this.nowLayerData.Geometry.verticesNeedUpdate = true;
                 this.nowLayerData.Geometry.normalsNeedUpdate = true;
                 this.nowLayerData.Geometry.colorsNeedUpdate = true;

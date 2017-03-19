@@ -10,12 +10,13 @@
  * 
  * Support
  *  - mesh
- *  - texture
- *  - normal / uv
  *  - material
- *  - skinning
  *
  *  Not Support
+ *  - Multi layers
+ *  - texture
+ *  - normal / uv
+ *  - skinning
  *  - material(ditail)
  *  - morph
  *  - scene
@@ -517,10 +518,21 @@ class lwoLoader {
             this.nowMat.specular.r = specular;
             this.nowMat.specular.g = specular;
             this.nowMat.specular.b = specular;
-        }else{  //LWはデフォルトが0.4
+        } else {  //LWはデフォルトが0.4
             this.nowMat.specular.r = 0.4;
             this.nowMat.specular.g = 0.4;
             this.nowMat.specular.b = 0.4;
+        }
+
+        //[LUMI]を探す＝自己発光
+        getLength = this.SeachStr('LUMI', this.tgtLength);
+        nowOffset = 0;
+        let emissive = 0;
+        if (getLength != -1) {
+            nowOffset = this.readOffset + getLength + 4;
+            //Color読み
+            nowOffset += 2; //長さ。ほぼ固定14なので飛ばす
+            emissive = this.bReader.getFloat32(nowOffset);
         }
 
         //両面フラグ
@@ -536,6 +548,10 @@ class lwoLoader {
             }
         }
 
+        this.nowMat.emissive.r = this.nowMat.color.r * emissive;
+        this.nowMat.emissive.g = this.nowMat.color.g * emissive;
+        this.nowMat.emissive.b = this.nowMat.color.b * emissive;
+
         this.nowMat.color.r *= nowDiffuse;
         this.nowMat.color.g *= nowDiffuse;
         this.nowMat.color.b *= nowDiffuse;
@@ -549,6 +565,8 @@ class lwoLoader {
             //１つのmesh終了
             this.nowLayerData.Geometry.computeBoundingBox();
             this.nowLayerData.Geometry.computeBoundingSphere();
+            this.nowLayerData.Geometry.computeFaceNormals();
+            this.nowLayerData.Geometry.computeVertexNormals();
 
             this.nowLayerData.Geometry.verticesNeedUpdate = true;
             this.nowLayerData.Geometry.normalsNeedUpdate = true;

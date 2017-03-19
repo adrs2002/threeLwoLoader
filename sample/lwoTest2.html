@@ -14,7 +14,7 @@
             margin: 0px;
             overflow: hidden;
         }
-
+        
         #info {
             color: #fff;
             position: absolute;
@@ -24,7 +24,7 @@
             z-index: 100;
             display: block;
         }
-
+        
         #info a,
         .button {
             color: #f00;
@@ -32,13 +32,30 @@
             text-decoration: underline;
             cursor: pointer;
         }
+        
+        #btmbox {
+            position: absolute;
+            bottom: 00px;
+            left: 50%;
+            z-index: 1001;
+            display: block;
+        }
     </style>
 </head>
 
 <body>
     <div id="info">
-		<a href="http://threejs.org" target="_blank">three.js</a> -LWO (LightWave3D Model) Loader test<br />
-	</div>
+        <a href="http://threejs.org" target="_blank">three.js</a> -LWO (LightWave3D Model) Loader test<br />
+        model data from <a href="https://nasa3d.arc.nasa.gov/" target="_new">NASA 3D Resources</a>
+    </div>
+
+    <div id="btmbox">
+        ↓ read from your local file...<br>
+        <input type="file" id="input_01_file" style="width:100%; margin:0px 0px 10px 0px;" accept="image/lwo" /> infomation:
+        <br>
+        <input id="edit_01_result" style="width:100%; margin:0px 0px 5px 0px;" disabled /><br>
+    </div>
+
     <div id="canvase3d"></div>
 
     <!-- <script src="three.min.js"></script> -->
@@ -52,7 +69,6 @@
     <!-- <script src='../../examples/js/libs/dat.gui.min.js'></script> -->
     <script src='lib/dat.gui.min.js'></script>
     <script>
-
         var StringBuffer = function (string) {
             this.buffer = [];
             this.append = function (string) { this.buffer.push(string); return this; };
@@ -84,6 +100,29 @@
 
         var animates = [];
         var actions = [];
+
+        var onProgress = function (xhr) {
+            if (xhr.lengthComputable) {
+                var percentComplete = xhr.loaded / xhr.total * 100;
+                element_result.value = (Math.round(percentComplete, 2) + '% downloaded');
+            }
+        };
+        var onError = function (xhr) {
+        };
+
+        var blob_url = null;
+
+        var element_file = document.getElementById("input_01_file");
+        var element_result = document.getElementById("edit_01_result");
+        var image = document.getElementById("image_01");
+
+        if (!window.File) {
+            element_result.value = "File don't support!";
+        }
+        if (!window.URL) {
+            element_result.value = "Blob URL Scheme don't support!";
+        }
+
         init();
 
         function init() {
@@ -96,7 +135,7 @@
             document.body.appendChild(container);
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
             scene = new THREE.Scene();
-            scene.add(new THREE.AmbientLight(0x000001));
+            scene.add(new THREE.AmbientLight(0x202030));
             // grid
             var gridHelper = new THREE.GridHelper(14, 1, 0x303030, 0x303030);
             gridHelper.position.set(0, -0.04, 0);
@@ -109,26 +148,12 @@
             manager.onProgress = function (item, loaded, total) {
                 console.log(item, loaded, total);
             };
-            var onProgress = function (xhr) {
-                if (xhr.lengthComputable) {
-                    var percentComplete = xhr.loaded / xhr.total * 100;
-                    console.log(Math.round(percentComplete, 2) + '% downloaded');
-                }
-            };
-            var onError = function (xhr) {
-            };
 
             Texloader = new THREE.TextureLoader();
             var loader = new THREE.lwoLoader(manager, Texloader);
 
             //download Model file
-            loader.load(['content/ACE-Composite-2011-3.lwo', true, true], function (object) {
-                for (var i = 0; i < object.objects.length; i++) {
-                    Models.push(object.objects[i]);
-                    scene.add(Models[i]);
-                }
-                object = null;
-            }, onProgress, onError);
+            modelLoad('content/Juno-composite.lwo');
 
             renderer = new THREE.WebGLRenderer();
             renderer.setPixelRatio(window.devicePixelRatio);
@@ -137,15 +162,15 @@
             container.appendChild(renderer.domElement);
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.target.set(0, 12, 0);
-            camera.position.set(2, 18, 28);
+            controls.target.set(0, 5, 0);
+            camera.position.set(2, 10, 28);
             camera.up.set(0, 1, 0);
 
             var light = new THREE.DirectionalLight(0xeeeeff, 1);
-            light.position.set(10, 100, 1).normalize();
+            light.position.set(50, 100, 1).normalize();
             scene.add(light);
 
-            light = new THREE.DirectionalLight(0xaa5555, 0.01);
+            light = new THREE.DirectionalLight(0xaa5555, 0.1);
             light.position.set(-1, -1, -1).normalize();
             scene.add(light);
 
@@ -186,6 +211,42 @@
             renderer.render(scene, camera);
         }
 
+        ////////////////
+
+        element_file.addEventListener("change", function (e) {
+
+            if (!(element_file.value)) { return; }
+
+            var file_list = element_file.files;
+            if (!file_list) { return; }
+
+            var file = file_list[0];
+            if (!file) { return; }
+            
+            blob_url = window.URL.createObjectURL(file);
+            modelLoad(blob_url);
+        });
+
+        function modelLoad(_url) {
+            if (Models != null && Models.length > 0) {
+                scene.remove(Models[0]);
+                Models = [];
+            }
+
+            element_result.value = "";
+            var loader = new THREE.lwoLoader(manager, Texloader);
+
+            //download Model file
+            loader.load([_url, true, true], function (object) {
+                for (var i = 0; i < object.objects.length; i++) {
+                    Models.push(object.objects[i]);
+                    scene.add(Models[i]);
+                }
+                object = null;
+                element_result.value = "Load Complete!";
+            }, onProgress, onError);
+
+        }
     </script>
 
 </body>
