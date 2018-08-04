@@ -7,11 +7,10 @@ LWO file(LightWave 3D file) loader for three.js.
 
 please look this [demo][] 
 
-[demo]: http://www001.upp.so-net.ne.jp/adrs2002/lwoloader/lwoTest.html      "Demo"
+[demo]: http://adrs2002.com/sandbox/lwoLoader/lwoTest.html      "Demo"
 
 ## Requirement
 THREE.js
-
 ##how to use　使い方的な。
 
 0. read 2 .js file , 'three.js(three.min.js)', and 'lwoLoader.js' your HTML file.
